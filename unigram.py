@@ -40,16 +40,16 @@ def subword_frequency(corpus, subwords):
                     while start <= len(word) - len(subword):
                         if word[start:start+len(subword)] == subword:
                             freq[subword] += 1
-                            start += len(subword)  # Skip overlapping matches
+                            start += len(subword) 
                         else:
                             start += 1
-    print(freq)
+    #print(freq)
     return freq
 
 def generate_probabilty_distribution(freq):
     total = sum(freq.values())
     prob_dist = {subword: count / total for subword, count in freq.items()}
-    print(prob_dist)
+    #print(prob_dist)
     return prob_dist
 
 def remove_spaces(corpus):
@@ -83,10 +83,47 @@ def viterbi(corpus, prob_dist, max_word_length=20, prob_unknown=1e-30):
         j = backpointer[i]
         segmentation.insert(0, corpus[j:i])
         i = j
-    print(segmentation)
+    #print(segmentation)
     return segmentation
 
+def calculate_likelihood(corpus, prob_dist, segmentation):
+    return sum(math.log(prob_dist.get(subword, 1e-30)) for subword in segmentation)
+
+def em_training(corpus, prob_dist, max_iterations=10, prune_threshold=1e-7):
+    candidates = generate_candidates(corpus)
+    print(f"Initial candidate vocabulary size: {len(candidates)}")
+
+    freq = subword_frequency(corpus, candidates)
+    prob_dist = generate_probabilty_distribution(freq)
+
+    corpus_path = corpus
+    corpus = remove_spaces(corpus)
+
+    for it in range(max_iterations):
+        print(f"\nIteration {it + 1}")
+        new_counts = Counter()
+
+        with open(corpus_path, 'r', encoding='utf-8') as file:
+            corpus = corpus.replace("▁", "").strip()
+                
+            segmentation = viterbi(corpus, prob_dist)
+            new_counts.update(segmentation)
+
+        prob_dist = generate_probabilty_distribution(new_counts)
+
+        pruned_candidates = {subword for subword, prob in prob_dist.items() if prob > prune_threshold}
+        candidates = pruned_candidates
+        prob_dist = {subword: prob for subword, prob in prob_dist.items() if subword in pruned_candidates}
+        print(f"Vocabulary size after iteration {it + 1}: {len(candidates)}")
+    
+    return candidates, prob_dist
+
 #generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt')))
-with open("output.txt", "r", encoding="utf-8") as f:
-    normalized_text = f.read().replace("▁", "").strip()
-viterbi(normalized_text, generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt'))))
+# with open("output.txt", "r", encoding="utf-8") as f:
+    # normalized_text = f.read().replace("▁", "").strip()
+
+final_candidates, final_prob_dist = em_training('output.txt', generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt'))), prune_threshold=1e-7)
+print(f"Final candidate vocabulary size: {len(final_candidates)}")
+print(f"Final probability distribution size:", final_prob_dist)
+print(final_candidates)
+
