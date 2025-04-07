@@ -32,11 +32,14 @@ def prepare_and_extract(input_file, output_file):
             normalized_sentence = normalize_text(sentence.strip())
             output_file.write(normalized_sentence + '\n')
 
-    vocab_chars = extract_unique_characters(output_file)
+    vocab_chars = extract_unique_characters(output_file.name)
 
     special_tokens = ["<unk>", "<s>", "</s>", "<pad>"]
     final_vocab = special_tokens + vocab_chars
 
     token2idx = {token: idx for idx, token in enumerate(final_vocab)}
+    print(token2idx)
     return token2idx
-    
+
+
+prepare_and_extract('input.txt', 'output.txt') 
