@@ -86,7 +86,7 @@ def viterbi(corpus, prob_dist, max_word_length=20, prob_unknown=1e-30):
     #print(segmentation)
     return segmentation
 
-def calculate_likelihood(corpus, prob_dist, segmentation):
+def calculate_likelihood(prob_dist, segmentation):
     return sum(math.log(prob_dist.get(subword, 1e-30)) for subword in segmentation)
 
 def em_training(corpus, prob_dist, max_iterations=10, prune_threshold=1e-7):
@@ -98,14 +98,15 @@ def em_training(corpus, prob_dist, max_iterations=10, prune_threshold=1e-7):
 
     corpus_path = corpus
     corpus = remove_spaces(corpus)
-
+    
     for it in range(max_iterations):
         print(f"\nIteration {it + 1}")
         new_counts = Counter()
 
-        with open(corpus_path, 'r', encoding='utf-8') as file:
+        with open(corpus_path, 'r', encoding='utf-8') as file, open("outputnew.txt", "w", encoding='utf-8') as output_file:
             corpus = corpus.replace("▁", "").strip()
-                
+            print("Corpus after removing spaces:", corpus)
+            output_file.write(corpus)
             segmentation = viterbi(corpus, prob_dist)
             new_counts.update(segmentation)
 
