@@ -29,9 +29,9 @@ class Lattice:
         self.generate_lattice()
 
     def _create_base_structure(self):
-        self.bos = Node(piece=b"<BOS>", pos=-1, length=0, node_id=self.node_id_counter, connections=[])
+        self.bos = Node(piece=b"<BOS>", pos=-1, length=1, node_id=self.node_id_counter, connections=[])
         self.node_id_counter += 1
-        self.eos = Node(piece=b"<EOS>", pos=len(self.sentence), length=0, node_id=self.node_id_counter, connections=[])
+        self.eos = Node(piece=b"<EOS>", pos=len(self.sentence), length=1, node_id=self.node_id_counter, connections=[])
         self.node_id_counter += 1
         self.begin_nodes = {i: [] for i in range(-1, self.size + 1)}
         self.end_nodes = {i: [] for i in range(-1, self.size + 1)}
@@ -60,7 +60,7 @@ class Lattice:
 
         self.begin_nodes[self.size].append(self.eos)
         self.end_nodes[self.size].append(self.eos)
-        self.nodes.append(self.eos)
+        self.nodes.extend([self.bos, self.eos])
 
         for end_node, nodes in self.end_nodes.items():
             for node in nodes:
