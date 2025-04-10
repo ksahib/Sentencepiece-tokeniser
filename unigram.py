@@ -1,54 +1,88 @@
 from collections import Counter
 import math
+import lattice
+
+
+# def generate_candidates(normalised_file):
+#     candidates = set()
+#     cache = {}
+#     with open(normalised_file, 'r', encoding='utf-8') as file:
+#         for line in file:
+#             sentence = line.strip()
+#             if not sentence:
+#                 continue
+#             for word in sentence.split('_'):
+#                 if not word:
+#                     continue
+#                 if word in cache:
+#                     candidates.update(cache[word])
+#                     continue
+#                 n = len(word)
+#                 word_subs = [word[i:j] 
+#                             for i in range(n) 
+#                             for j in range(i+1, n+1)]
+#                 # Inside generate_candidates, after generating word_subs
+#                 # word_subs = [sub for sub in word_subs if '<pad>' not in sub]
+#                 cache[word] = word_subs 
+#                 candidates.update(word_subs)
+#     #print(candidates)
+#     return candidates
 
 def generate_candidates(normalised_file):
     candidates = set()
-    cache = {}
     with open(normalised_file, 'r', encoding='utf-8') as file:
         for line in file:
-            sentence = line.strip()
-            if not sentence:
-                continue
-            for word in sentence.split('▁'):
-                if not word:
-                    continue
-                if word in cache:
-                    candidates.update(cache[word])
-                    continue
-                n = len(word)
-                word_subs = [word[i:j] 
-                            for i in range(n) 
-                            for j in range(i+1, n+1)]
-                cache[word] = word_subs 
-                candidates.update(word_subs)
-    #print(candidates)
+            sentence = line.strip()  # Remove delimiters if needed
+            n = len(sentence)
+            # Generate all possible substrings
+            word_subs = [
+                sentence[i:j] 
+                for i in range(n) 
+                for j in range(i+1, n+1)
+            ]
+            candidates.update(word_subs)
     return candidates
 
 #generate_candidates('output.txt')
+# def subword_frequency(corpus, subwords):
+#     freq = Counter()
+#     with open(corpus, 'r', encoding='utf-8') as file:
+#         for line in file:
+#             sentence = line.strip()
+#             if not sentence:
+#                 continue
+#             for word in sentence.split('_'):
+#                 if not word:
+#                     continue
+#                 for subword in subwords:
+#                     start = 0
+#                     while start <= len(word) - len(subword):
+#                         if word[start:start+len(subword)] == subword:
+#                             freq[subword] += 1
+#                             start += len(subword) 
+#                         else:
+#                             start += 1
+#     #print(freq)
+#     return freq
+
 def subword_frequency(corpus, subwords):
     freq = Counter()
     with open(corpus, 'r', encoding='utf-8') as file:
         for line in file:
-            sentence = line.strip()
-            if not sentence:
-                continue
-            for word in sentence.split('▁'):
-                if not word:
-                    continue
-                for subword in subwords:
-                    start = 0
-                    while start <= len(word) - len(subword):
-                        if word[start:start+len(subword)] == subword:
-                            freq[subword] += 1
-                            start += len(subword) 
-                        else:
-                            start += 1
-    #print(freq)
+            sentence = line.strip()  # Remove delimiters
+            for subword in subwords:
+                start = 0
+                while start <= len(sentence) - len(subword):
+                    if sentence[start:start+len(subword)] == subword:
+                        freq[subword] += 1
+                        start += len(subword)  # Non-overlapping counts
+                    else:
+                        start += 1
     return freq
 
 def generate_probabilty_distribution(freq):
     total = sum(freq.values())
-    prob_dist = {subword: count / total for subword, count in freq.items()}
+    prob_dist = {subword: math.log(count / total) for subword, count in freq.items()}
     #print(prob_dist)
     return prob_dist
 
@@ -89,42 +123,141 @@ def viterbi(corpus, prob_dist, max_word_length=20, prob_unknown=1e-30):
 def calculate_likelihood(prob_dist, segmentation):
     return sum(math.log(prob_dist.get(subword, 1e-30)) for subword in segmentation)
 
-def em_training(corpus, prob_dist, max_iterations=10, prune_threshold=1e-7):
-    candidates = generate_candidates(corpus)
-    print(f"Initial candidate vocabulary size: {len(candidates)}")
+# def em_training(corpus, prob_dist, max_iterations=10, prune_threshold=1e-7):
+#     candidates = generate_candidates(corpus)
+#     print(f"Initial candidate vocabulary size: {len(candidates)}")
 
-    freq = subword_frequency(corpus, candidates)
-    prob_dist = generate_probabilty_distribution(freq)
+#     freq = subword_frequency(corpus, candidates)
+#     prob_dist = generate_probabilty_distribution(freq)
 
-    corpus_path = corpus
-    corpus = remove_spaces(corpus)
+#     corpus_path = corpus
+#     corpus = remove_spaces(corpus)
     
-    for it in range(max_iterations):
-        print(f"\nIteration {it + 1}")
-        new_counts = Counter()
+#     for it in range(max_iterations):
+#         print(f"\nIteration {it + 1}")
+#         new_counts = Counter()
 
-        with open(corpus_path, 'r', encoding='utf-8') as file, open("outputnew.txt", "w", encoding='utf-8') as output_file:
-            corpus = corpus.replace("▁", "").strip()
-            print("Corpus after removing spaces:", corpus)
-            output_file.write(corpus)
-            segmentation = viterbi(corpus, prob_dist)
-            new_counts.update(segmentation)
+#         with open(corpus_path, 'r', encoding='utf-8') as file, open("outputnew.txt", "w", encoding='utf-8') as output_file:
+#             corpus = corpus.replace("▁", "").strip()
+#             print("Corpus after removing spaces:", corpus)
+#             output_file.write(corpus)
+#             segmentation = viterbi(corpus, prob_dist)
+#             new_counts.update(segmentation)
 
-        prob_dist = generate_probabilty_distribution(new_counts)
+#         prob_dist = generate_probabilty_distribution(new_counts)
 
-        pruned_candidates = {subword for subword, prob in prob_dist.items() if prob > prune_threshold}
-        candidates = pruned_candidates
-        prob_dist = {subword: prob for subword, prob in prob_dist.items() if subword in pruned_candidates}
-        print(f"Vocabulary size after iteration {it + 1}: {len(candidates)}")
+#         pruned_candidates = {subword for subword, prob in prob_dist.items() if prob > prune_threshold}
+#         candidates = pruned_candidates
+#         prob_dist = {subword: prob for subword, prob in prob_dist.items() if subword in pruned_candidates}
+#         print(f"Vocabulary size after iteration {it + 1}: {len(candidates)}")
     
-    return candidates, prob_dist
+#     return candidates, prob_dist
+
+# def logsumExp(a, b):
+#     if not a or not b:
+#         return -math.inf
+#     if a == -math.inf and b == -math.inf:
+#         return -math.inf
+#     e1 = math.exp(a - max(a,b))
+#     e2 = math.exp(b - max(a,b))
+#     return max(a,b) + math.log(e1 + e2)
+
+def logsumExp(a, b):
+    if a == -math.inf and b == -math.inf:
+        return -math.inf
+    max_val = max(a, b)
+    return max_val + math.log(math.exp(a - max_val) + math.exp(b - max_val))
+
+def KL_divergence(p, q, vocab):
+    d_kl = 0.0
+    for v in vocab:
+        d_kl += math.exp(p[v]) * (p[v] - q[v])
+    return d_kl
+
+def baum_welch(corpus, vocab, epsilon: float):
+    global_EC = {token: -math.inf for token in vocab}
+    global_EC['<BOS>'] = -math.inf
+    global_EC['<EOS>'] = -math.inf
+    with open(corpus, 'r', encoding='utf-8') as file:
+        prob_dist = generate_probabilty_distribution(subword_frequency(corpus, vocab))
+        for line in file:
+            sentence = line.strip()
+            if not sentence:
+                continue
+            lat = lattice.Lattice(sentence, prob_dist)
+            old_prob_dist = prob_dist.copy()
+            while(True):
+                #forward pass
+                for i in range(len(sentence)+1):
+                    if(i == 0):
+                        lat.nodes[i].alpha = 0
+                    else:
+                        w_st = lat.end_nodes.get(i, [])
+                        for w in w_st:
+                            lat.nodes[i].alpha = logsumExp(lat.nodes[i-1].alpha, w.score)
+                #backward pass
+                for i in range(len(sentence), -1, -1):
+                    if(i == len(sentence)):
+                        lat.nodes[i].beta = 0
+                    else:
+                        w_st = lat.begin_nodes.get(i, [])
+                        for w in w_st:
+                            lat.nodes[i].beta = logsumExp(lat.nodes[i+1].beta, w.score)
+                #E-step
+                Z = lat.nodes[len(sentence)].alpha
+                for node in lat.nodes:
+                    node.gamma = node.alpha + node.beta + node.score - Z
+                    print(f"Node {node.piece.decode()} gamma: {node.gamma}")
+                EC = {}
+                for node in lat.nodes:
+                    EC[node.piece.decode()] = -math.inf
+                for node in lat.nodes:
+                    EC[node.piece.decode()] = logsumExp(EC[node.piece.decode()], node.gamma)
+                #M-step
+                EC_w_prime = - math.inf
+                new_prob_dist = {}
+                for value in EC.values():
+                    EC_w_prime = logsumExp(EC_w_prime, value)
+                for node in lat.nodes:
+                    node.score = EC[node.piece.decode()] - EC_w_prime
+                    new_prob_dist[node.piece.decode()] = EC[node.piece.decode()] - EC_w_prime
+                #convergence check
+                theta = KL_divergence(old_prob_dist, new_prob_dist, vocab)
+                if theta < epsilon :
+                    break
+                old_prob_dist = new_prob_dist
+
+            for node in lat.nodes:
+                global_EC[node.piece.decode()] = logsumExp(global_EC[node.piece.decode()], EC[node.piece.decode()])
+        
+        # for value in global_EC.values():
+        #     global_EC[value] = logsumExp(global_EC[value], value)
+        final_prob_dist = {}
+        Z_final = -math.inf
+        for values in global_EC.values():
+            Z_final = logsumExp(Z_final, values)
+        for token in vocab:
+            final_prob_dist[token] = global_EC[token] - Z_final
+    
+    return final_prob_dist
+
+
+
+prob = baum_welch('output.txt', generate_candidates('output.txt'), 1e-6)
+with open('output.txt', 'r', encoding='utf-8') as f:
+    corpus_content = f.read().strip()
+l = lattice.Lattice(corpus_content, prob)
+l.print_lattice()
+
+
+            
+
 
 #generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt')))
 # with open("output.txt", "r", encoding="utf-8") as f:
     # normalized_text = f.read().replace("▁", "").strip()
 
-final_candidates, final_prob_dist = em_training('output.txt', generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt'))), prune_threshold=1e-7)
-print(f"Final candidate vocabulary size: {len(final_candidates)}")
-print(f"Final probability distribution size:", final_prob_dist)
-print(final_candidates)
-
+#final_candidates, final_prob_dist = em_training('output.txt', generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt'))), prune_threshold=1e-7)
+# print(f"Final candidate vocabulary size: {len(final_candidates)}")
+# print(f"Final probability distribution size:", final_prob_dist)
+# print(final_candidates)
