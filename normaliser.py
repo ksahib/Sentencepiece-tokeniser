@@ -11,7 +11,8 @@ def normalize_text(text):
     # it matches the comma, /1 is now comma, and then it replaces it with r' \1 ' which is " , "
     normalized = re.sub(r'([,.!?;:])', r' \1 ', normalized) 
     normalized = re.sub(r'\s+', ' ', normalized)
-    normalized = normalized.replace(" ", "▁")
+    normalized = normalized.replace(" ", "<pad>")
+    normalized = normalized.replace("\n", "<s>")
     return normalized
 
 def split_into_sentences(text):
