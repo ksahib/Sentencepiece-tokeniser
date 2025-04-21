@@ -1,47 +1,43 @@
 from collections import Counter
 import math
+import re
 import lattice
 
 
-# def generate_candidates(normalised_file):
-#     candidates = set()
-#     cache = {}
-#     with open(normalised_file, 'r', encoding='utf-8') as file:
-#         for line in file:
-#             sentence = line.strip()
-#             if not sentence:
-#                 continue
-#             for word in sentence.split('<pad>'):
-#                 if not word:
-#                     continue
-#                 if word in cache:
-#                     candidates.update(cache[word])
-#                     continue
-#                 n = len(word)
-#                 word_subs = [word[i:j] 
-#                             for i in range(n) 
-#                             for j in range(i+1, n+1)]
-#                 # Inside generate_candidates, after generating word_subs
-#                 # word_subs = [sub for sub in word_subs if '<pad>' not in sub]
-#                 cache[word] = word_subs 
-#                 candidates.update(word_subs)
-#     #print(candidates)
-#     return candidates
-
 def generate_candidates(normalised_file):
     candidates = set()
+    cache = set()
     with open(normalised_file, 'r', encoding='utf-8') as file:
         for line in file:
-            sentence = line.strip()  # Remove delimiters if needed
-            n = len(sentence)
-            # Generate all possible substrings
-            word_subs = [
-                sentence[i:j] 
-                for i in range(n) 
-                for j in range(i+1, n+1)
-            ]
-            candidates.update(word_subs)
+            sentence = line.strip()
+            if not sentence:
+                continue
+            for i in range(len(sentence)):
+                for j in range(i+1, i+21):
+                    word_subs = sentence[i:j]
+                    if not word_subs:
+                        continue
+                    if word_subs in cache:
+                        continue
+                    candidates.add(word_subs)
+                    cache.add(word_subs)
+    #print(candidates)
     return candidates
+
+# def generate_candidates(normalised_file):
+#     candidates = set()
+#     with open(normalised_file, 'r', encoding='utf-8') as file:
+#         for line in file:
+#             sentence = line.strip()  # Remove delimiters if needed
+#             n = len(sentence)
+#             # Generate all possible substrings
+#             word_subs = [
+#                 sentence[i:j] 
+#                 for i in range(n) 
+#                 for j in range(i+1, n+1)
+#             ]
+#             candidates.update(word_subs)
+#     return candidates
 
 #generate_candidates('output.txt')
 # def subword_frequency(corpus, subwords):
@@ -67,22 +63,28 @@ def generate_candidates(normalised_file):
 
 def subword_frequency(corpus, subwords):
     freq = Counter()
+    i = 1
     print("Subword frequency calculation started")
     with open(corpus, 'r', encoding='utf-8') as file:
         for line in file:
-            i = 1
             print(f"Line {i}: ")  # Debugging line
             i += 1
             sentence = line.strip()  # Remove delimiters
+            if not sentence:
+                continue
             for subword in subwords:
-                start = 0
-                while start <= len(sentence) - len(subword):
-                    print(f"start: {start}, len: {len(sentence) - len(subword)}")
-                    if sentence[start:start+len(subword)] == subword:
-                        freq[subword] += 1
-                        start += len(subword)  # Non-overlapping counts
-                    else:
-                        start += 1
+                pattern = r'(?={})'.format(re.escape(subword))
+                freq[subword] += len(re.findall(pattern, sentence))
+            # for subword in subwords:
+            #     start = 0
+            #     while start <= len(sentence) - len(subword):
+            #         print(f"start: {start}, len: {len(sentence) - len(subword)}")
+            #         if sentence[start:start+len(subword)] == subword:
+            #             freq[subword] += 1
+            #             start += len(subword)  # Non-overlapping counts
+            #         else:
+            #             start += 1
+    print("freq: ", freq)  # Debugging line
     return freq
 
 def generate_probabilty_distribution(freq):
@@ -95,9 +97,9 @@ def generate_probabilty_distribution(freq):
 
 def remove_spaces(corpus):
     with open(corpus, 'r', encoding='utf-8') as file:
-        text = file.read()       
-    text = text.replace(' ', '') 
-    text = text.strip()          
+        text = file.read()
+    text = text.replace(' ', '')
+    text = text.strip()
     print("Spaces removed")
     print(text)
     return text
@@ -111,10 +113,11 @@ def viterbi(corpus, prob_dist, max_word_length=20, prob_unknown=1e-30):
     for i in range(1, n + 1):
         for j in range(max(0, i - max_word_length), i):
             subword = corpus[j:i]
+            penalty = -20
             if subword in prob_dist:
-                score = dp[j] + math.log(prob_dist[subword])
+                score = dp[j] + prob_dist[subword] + (penalty * len(subword)**2)
             else:
-                score = dp[j] + math.log(prob_unknown)
+                score = dp[j] + math.log(prob_unknown) + (penalty * len(subword)**2)
             if score > dp[i]:
                 dp[i] = score
                 backpointer[i] = j
@@ -172,14 +175,23 @@ def calculate_likelihood(prob_dist, segmentation):
 def logsumExp(a, b):
     if a == -math.inf and b == -math.inf:
         return -math.inf
-    max_val = max(a, b)
-    return max_val + math.log(math.exp(a - max_val) + math.exp(b - max_val))
+    m = max(a, b)
+    return m + math.log(math.exp(a-m) + math.exp(b-m))
+
 
 def KL_divergence(p, q, vocab):
     d_kl = 0.0
     for v in vocab:
         d_kl += math.exp(p[v]) * (p[v] - q[v])
     return d_kl
+
+def normalise_prob_dist(prob_dist):
+    Z = -math.inf
+    for value in prob_dist.values():
+        Z = logsumExp(Z, value)
+    for token in prob_dist.keys():
+        prob_dist[token] = prob_dist[token] - Z
+    return prob_dist
 
 def baum_welch(corpus, vocab, epsilon: float, prob_dist):
     print("Baum-Welch algorithm started")
@@ -195,52 +207,101 @@ def baum_welch(corpus, vocab, epsilon: float, prob_dist):
             if not sentence:
                 continue
             lat = lattice.Lattice(sentence, prob_dist)
-            old_prob_dist = prob_dist.copy()
+            lat.alpha = [-math.inf] * (len(sentence) + 3)
+            lat.beta = [-math.inf] * (len(sentence) + 3)
+            lat.alpha[0] = 0.0
+            #old_prob_dist = prob_dist.copy()
+            # old_prob_dist = {}
+            iteration = 0
             while(True):
+                # print(f"Iteration {test}")
+                # if test > 2:
+                #     return 0
                 #forward pass
                 print("Forward pass")
                 for i in range(len(sentence)+1):
-                    if(i == 0):
-                        lat.nodes[i].alpha = 0
-                    else:
-                        w_st = lat.end_nodes.get(i, [])
-                        for w in w_st:
-                            lat.nodes[i].alpha = logsumExp(lat.nodes[i-1].alpha, w.score)
+                    w_st = lat.end_nodes.get(i, [])
+                    for w in w_st:
+                        lat.alpha[i+1] = logsumExp(lat.alpha[i+1], (lat.alpha[w.pos+1] + w.score))
+                        print(f"Node {i} alpha: {lat.alpha[i+1]}")  # Debugging
                 #backward pass
                 print("Backward pass")
-                for i in range(len(sentence), -1, -1):
-                    if(i == len(sentence)):
-                        lat.nodes[i].beta = 0
+                for i in range(len(sentence)+1, -1, -1):
+                    if(i == len(sentence)+1):
+                        lat.beta[i+1] = 0.0
+                        print(f"Node {i} beta: {lat.beta[i+1]}")  # Debugging 
                     else:
                         w_st = lat.begin_nodes.get(i, [])
                         for w in w_st:
-                            lat.nodes[i].beta = logsumExp(lat.nodes[i+1].beta, w.score)
+                            lat.beta[i+1] = logsumExp(lat.beta[i+1], (lat.beta[(w.pos+w.length)+1] + w.score))
+                            print(f"Node {i} beta: {lat.beta[i+1]}")
                 #E-step
-                Z = lat.nodes[len(sentence)].alpha
+                Z = lat.alpha[len(sentence)+1]
                 for node in lat.nodes:
-                    node.gamma = node.alpha + node.beta + node.score - Z
-                    print(f"Node {node.piece.decode()} gamma: {node.gamma}")
+                    node.gamma = lat.alpha[node.pos+1] + lat.beta[(node.pos + node.length)+1] + node.score - Z
+                    piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                    piece_str = piece_bytes.decode()
+                    print(f"Node {piece_str} gamma: {node.gamma}")
                 EC = {}
                 for node in lat.nodes:
-                    EC[node.piece.decode()] = -math.inf
+                    piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                    piece_str = piece_bytes.decode()
+                    EC[piece_str] = -math.inf
                 for node in lat.nodes:
-                    EC[node.piece.decode()] = logsumExp(EC[node.piece.decode()], node.gamma)
+                    piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                    piece_str = piece_bytes.decode()
+                    EC[piece_str] = logsumExp(EC[piece_str], node.gamma)
                 #M-step
                 EC_w_prime = - math.inf
                 new_prob_dist = {}
                 for value in EC.values():
                     EC_w_prime = logsumExp(EC_w_prime, value)
                 for node in lat.nodes:
-                    node.score = EC[node.piece.decode()] - EC_w_prime
-                    new_prob_dist[node.piece.decode()] = EC[node.piece.decode()] - EC_w_prime
+                    piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                    piece_str = piece_bytes.decode()
+                    node.score = EC[piece_str] - EC_w_prime
+                    new_prob_dist[piece_str] = EC[piece_str] - EC_w_prime
+
+                pruned_set = new_prob_dist.copy()
                 #convergence check
-                theta = KL_divergence(old_prob_dist, new_prob_dist, vocab)
-                if theta < epsilon :
-                    break
-                old_prob_dist = new_prob_dist
+                if iteration > 0:
+                    theta = KL_divergence(prob_dist, new_prob_dist, new_prob_dist.keys())
+                    if theta < epsilon:
+                        prune_threshold = 1e-1000
+                        for tok, logp in new_prob_dist.items():
+                            p = math.exp(logp)
+                            if p < prune_threshold and tok not in ['<BOS>', '<EOS>']:
+                                del pruned_set[tok]
+                                for node in lat.nodes:
+                                    piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                                    piece_str = piece_bytes.decode()
+                                    if piece_str == tok:
+                                        lat.remove_node(node)
+                        normalise_prob_dist(pruned_set)
+                        theta2 = KL_divergence(prob_dist, pruned_set, pruned_set.keys())
+                        if theta2 < epsilon:
+                            break
+                # for token in old_prob_dist.keys():
+                #     if token not in new_prob_dist:
+                #         new_prob_dist[token] = math.log(1e-40)
+                #vocab = set(pruned_set.keys())
+                
+                # for token in prob_dist.keys():
+                #     if token not in pruned_set:
+                #         del prob_dist[token]
+                
+                
+                prob_dist = pruned_set
+                lat = lattice.Lattice(sentence, prob_dist)
+                lat.alpha = [-math.inf] * (len(sentence) + 3)
+                lat.beta = [-math.inf] * (len(sentence) + 3)
+                lat.alpha[0] = 0.0
+                iteration += 1
 
             for node in lat.nodes:
-                global_EC[node.piece.decode()] = logsumExp(global_EC[node.piece.decode()], EC[node.piece.decode()])
+                piece_bytes = node.piece.tobytes() if isinstance(node.piece, memoryview) else node.piece
+                piece_str = piece_bytes.decode()
+                global_EC[piece_str] = logsumExp(global_EC[piece_str], EC[piece_str])
         
         # for value in global_EC.values():
         #     global_EC[value] = logsumExp(global_EC[value], value)
@@ -254,24 +315,21 @@ def baum_welch(corpus, vocab, epsilon: float, prob_dist):
     return final_prob_dist
 
 
-
-prob_dist = generate_probabilty_distribution(subword_frequency("output.txt", generate_candidates("output.txt")))
-prob = baum_welch('output.txt', generate_candidates('output.txt'), 1e-6, prob_dist)
+# words = generate_candidates('output.txt')
+# print(f"Candidates: {words}")
+words = generate_candidates('output.txt')
+print(f"Candidates: {words}")
+freq = subword_frequency('output.txt', words)
+for subword in words:
+    freq[subword] += 1.0
+print(f"Frequency: {freq}")
+prob_dist2 = generate_probabilty_distribution(freq)
+print(f"Probability distribution: {prob_dist2}")
+prob = baum_welch('output.txt', generate_candidates('output.txt'), 1e-7, prob_dist2)
+print(f"Candidates size: {words}")
+print(f"Final probability distribution size: {prob}")
 with open('output.txt', 'r', encoding='utf-8') as f:
     corpus_content = f.read().strip()
 
-l = lattice.Lattice(corpus_content, prob)
-l.print_lattice()
-
-
-            
-
-
-#generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt')))
-# with open("output.txt", "r", encoding="utf-8") as f:
-    # normalized_text = f.read().replace("▁", "").strip()
-
-#final_candidates, final_prob_dist = em_training('output.txt', generate_probabilty_distribution(subword_frequency('output.txt', generate_candidates('output.txt'))), prune_threshold=1e-7)
-# print(f"Final candidate vocabulary size: {len(final_candidates)}")
-# print(f"Final probability distribution size:", final_prob_dist)
-# print(final_candidates)
+segmentation = viterbi(corpus_content, prob)
+print(f"Segmentation: {segmentation}")
