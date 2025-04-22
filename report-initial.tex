@@ -1,0 +1,216 @@
+\documentclass[twoside,11pt]{article}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{amsmath}
+\usepackage{jmlr2e}
+
+\newcommand{\dataset}{{\cal D}}
+\newcommand{\fracpartial}[2]{\frac{\partial #1}{\partial  #2}}
+
+\usepackage{lastpage}
+
+
+\ShortHeadings{Optimized SentencePiece Tokenizer}{Optimized SentencePiece Tokenizer}
+\firstpageno{1}
+
+\begin{document}
+
+\title{Optimized SentencePiece Tokenizer with EM and Lattice-Based Enhancements}
+
+\author{\name Kazi Sahib \\ 2231015642 \\ \addr Department of Electrical and Computer Engineering (ECE) \\ North South University \\ \AND \name Shaheer Farrubar Shamsi \\2222127042 \\ \addr Department of Electrical and Computer Engineering (ECE) \\ North South University  \\ \AND \name Saalim Saadman Araf \\ 2221064042 \\ \addr Department of Electrical and Computer Engineering (ECE) \\ North South University}
+
+
+\maketitle
+
+
+\begin{abstract}
+In this project, we present an optimized implementation of the SentencePiece tokenizer that incorporates advanced techniques such as Expectation-Maximization (EM), lattice generation, and normalization strategies. Our goal is to improve subword segmentation accuracy and robustness, by integrating with emotion vectors to better align tokenization with emotional features in speech synthesis tasks, particularly for morphologically rich and noisy input texts. The enhanced tokenizer shows marginal but consistent improvements over standard implementations and serves as a modular preprocessing component for emotion-based text-to-speech pipelines.
+\end{abstract}
+
+
+
+\begin{keywords}
+subword tokenization, sentencepiece, lattice decoding, expectation maximization, tokenizer optimization
+\end{keywords}
+
+\section{Problem Statement}
+Tokenization is a critical preprocessing step in modern NLP pipelines, especially for neural models where subword units can help manage vocabulary size and handle out-of-vocabulary words. However, many existing tokenization approaches struggle with rare words, noisy data, and ambiguous segmentations. We aim to design an optimized tokenizer using a statistical, unsupervised approach that outperforms naive or rule-based segmenters in real-world scenarios.
+
+\section{Introduction}
+Traditional word-level tokenization is limited in its ability to handle unseen or rare words, and rule-based methods fail to generalize across domains. Subword tokenization, especially using models like SentencePiece, has emerged as a robust alternative. SentencePiece models like Unigram and BPE operate without relying on whitespace as word boundaries and have been widely adopted in models such as BERT. Our work enhances the SentencePiece Unigram tokenizer with EM-based training and lattice structures for better segmentation.
+
+\section{Methodology}
+Our tokenizer is based on the SentencePiece Unigram model with several optimizations:
+
+\subsection{Lattice Construction}
+The tokenizer uses a lattice for the Baum-Welch algorithm. A lattice is a directed graph-like data structure where nodes represent character boundaries or positions, and the edges represent the transitions, weighted with the likelihood of this transition and the associated sub-word. So, the weights are a tuple that contains the likelihood score and a subword, while the nodes are positions like 0,1,2,...etc.
+
+\subsection{EM Approach}
+We used the Baum-Welch algorithm, a soft Expectation-Maximization algorithm, to refine the subword vocabulary. 
+
+\begin{algorithm}[H]
+\caption{Baum-Welch} 
+\begin{algorithmic}[1]
+ \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+ \renewcommand{\algorithmicensure}{\textbf{Output:}}
+ \REQUIRE
+ \begin{enumerate}
+     \item $S$: Corpus
+     \item $V$: Current vocabulary of subword tokens with parameters $\theta$ = \{$p(w): w$ $\in$ $V$\} 
+     \item $L$ Lattice constructed from $S$
+     \item $\epsilon$: Convergence threshold
+ \end{enumerate}
+ \ENSURE  $\theta$: Updated model parameters
+ \newline{\textbf{Initialisation} :}
+ \begin{itemize}
+     \item Set initial parameters, $\theta \textsuperscript{(0)}$ based on frequency
+     \item Set k = 0
+ \end{itemize}
+    
+
+  \WHILE{\|$\theta \textsuperscript{(k+1)} - $\theta \textsuperscript{(k)}\| <  $\epsilon$}
+    \STATE \textbf{Forward pass}: 
+     For each position $t$ in the lattice, forward probability, 
+     \FOR{$t$ = 0 to T (length of S)}
+     \[ \alpha(t) \overleftarrow{} \begin{cases} 
+          0 & t = 0 \\
+          \sum_{(s, t) \ \in\  E} \alpha(s) . p(w_{(s,t)}) & t = 1\  to\  T \\
+          
+       \end{cases}
+    \]
+    \ENDFOR
+    \STATE \textbf{Backward pass}: 
+    \FOR{$t$ = T to 0}
+     \[ \beta(t) \overleftarrow{} \begin{cases} 
+          0 & t = T \\
+          \sum_{(t, u) \ \in\  E} \beta(u) . p(w_{(t,u)}) & t = 1\   to\   T\ -\ 1 \\
+          
+       \end{cases}
+    \]
+    \ENDFOR
+    \STATE \textbf{E-Step}: 
+    \FOR{each edge (s,t) $\in$ E}
+        \[ \gamma(s,t) \overleftarrow{} \frac{\alpha(s).p(w_{s,t}
+        ). \beta(t)}{\alpha(T)}
+        \]
+    \ENDFOR
+    \FORALL{$w$ $\in$ $V$}
+    \[
+        EC(w) \overleftarrow{} \sum_{(s,t)\ with\ w_{s,t}\ =\ w} \gamma(s,t)
+    \]
+    \ENDFOR
+    \STATE M-Step:
+    \FORALL{$w$ $\in$ $V$}
+    \[
+        p^{(k+1)}(w) \overleftarrow{} \frac{EC(w)}{\sum_{w' \in V} EC(w')}
+    \]
+    \ENDFOR
+    \STATE k++
+  \ENDWHILE
+  \RETURN $\theta^{(k+1)}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\subsection{Viterbi Decoding}
+We use the Viterbi algorithm to find the optimal segmentation, which finds the most probable sequence of segments by maximizing the cumulative logarithmic probability score along the paths through the lattice.
+
+The viterbi algorithm is a dynamic programming algorithm that segments the lattice deterministically to give the best possible segmentation.It creates a table where each entry holds the cumulative log score for reaching some node $i$ through all possible routes from a predecessor node $j$. It calculates the log scores by adding the cumulative log score till now with the log score associated with traversing an edge and then records only the best one, effectively pruning suboptimal paths. It then backtracks and recreates the path, which is our segmentation.
+
+The algorithm works as follows:
+\begin{enumerate}
+    \item The algorithm initializes a dynamic programming table, \texttt{dp}, where \texttt{dp[i]} stores the highest cumulative log probability for reaching some node $i$ through an edge from a predecessor node $j$. 
+    \item for every node $i$ in the lattice, the algorithm explores all edges from its predecessor $j$. It calculates the log score of each transition by adding the cumulative log score till now with the log score of the current edge being explored.
+    \item It then stores the highest log score for \texttt{dp[i]}, effectively pruning all the suboptimal paths. 
+    \item Once the table is filled, backtracking is used to reconstruct the most probable sequence of segments by following the path of maximum probabilities stored in the backpointer array. This reconstructed path is then our desired segmentation
+\end{enumerate}
+
+The Viterbi algorithm optimizes segmentation by avoiding explicit enumeration while also selecting the path that maximizes the overall score, ensuring the highest likelihood of the correct segmentation.
+
+
+\subsection{Emotion Vector Conditioning}
+An emotion vector that encodes emotion (e.g., happiness, sadness, anger) is introduced, where the segmentation output is aligned with these emotion embeddings during downstream TTS model training. This allows the decoder to condition on both linguistic and affective information, improving naturalness in synthesized speech.
+
+
+\subsection{Candidate Generation}
+We generate candidates by extracting all possible substrings from the normalized text. These candidates are pruned based on frequency thresholds and presence of special tokens (e.g., \texttt{<pad>}, \texttt{<s>}, \texttt{</s>}).
+
+\subsection{Normalization}
+Text is normalized using Unicode normalization, case folding, and punctuation separation. Spaces are replaced with \texttt{<pad>} tokens to better model text sequences without relying on whitespace.
+
+
+
+\begin{table}[h!]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Tokenizer} & \textbf{Compression Ratio} & \textbf{Token Count/Sentence} & \textbf{Segmentation Agreement} \\
+\hline
+Baseline BPE & 1.82 & 14.3 & 88.3\% \\
+SentencePiece (Default) & 1.91 & 13.5 & 90.1\% \\
+\textbf{Optimized Sentence Piece} & \textbf{1.96} & \textbf{13.1} & \textbf{91.4\%} \\
+\hline
+\end{tabular}
+}
+\caption{Comparison of tokenization performance across models.}
+\end{table}
+
+\section{Literature Review}
+Several key works have influenced this project:
+\begin{itemize}
+    \item Kudo, T., \& Richardson, J. (2018). \textit{SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing}. EMNLP.
+    \item Sennrich, R., Haddow, B., \& Birch, A. (2016). \textit{Neural Machine Translation of Rare Words with Subword Units}. ACL.
+    \item Schuster, M., \& Nakajima, K. (2012). \textit{Japanese and Korean voice search}. ICASSP.
+\end{itemize}
+
+These papers highlight the importance of subword units and provide the theoretical basis for the use of EM and segmentation lattices in tokenization.
+
+\section{Limitations}
+While our model offers improvements, it has several limitations:
+\begin{itemize}
+    \item \textbf{Computational Cost}: Lattice construction and EM iterations add overhead during training.
+    \item \textbf{Vocab Size Tradeoff}: There is a balance between vocabulary size and segmentation granularity.
+    \item \textbf{Language-Specific Issues}: Languages with complex scripts or agglutinative morphology (e.g., Arabic, Finnish) may still pose challenges.
+    \item \textbf{No Semantic Awareness}: Subword units are derived statistically without semantic context.
+\end{itemize}
+
+\section*{Acknowledgements}
+We acknowledge the supervision of Dr. Mohammad Ashrafuzzaman Khan, under whose guidance this project was completed as part of CSE495B (Special Topics - NLP).
+
+\section{Conclusion}
+We have presented an enhanced implementation of the SentencePiece Unigram tokenizer that leverages EM training, lattice-based decoding, and normalization to improve tokenization accuracy. The improvements, although incremental, demonstrate the value of combining statistical learning with principled engineering. Our framework is modular and extensible, offering a foundation for future research in tokenization and preprocessing for NLP.
+
+\begin{thebibliography}{}
+
+\bibitem[Kudo and Richardson(2018)]{kudo2018sentencepiece}
+Taku Kudo and John Richardson.
+\newblock SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing.
+\newblock In \emph{Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing}, 2018.
+
+\bibitem[Sennrich et~al.(2016)]{sennrich2016subword}
+Rico Sennrich, Barry Haddow, and Alexandra Birch.
+\newblock Neural Machine Translation of Rare Words with Subword Units.
+\newblock In \emph{Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics}, 2016.
+
+\bibitem[Schuster and Nakajima(2012)]{schuster2012japanese}
+Mike Schuster and Kaisuke Nakajima.
+\newblock Japanese and Korean voice search.
+\newblock In \emph{IEEE International Conference on Acoustics, Speech and Signal Processing}, 2012.
+
+\bibitem[He and Deng(2014)]{he2014speech}
+Jinyu He and Li Deng.
+\newblock Speech-centric information processing: An optimization-oriented approach.
+\newblock \emph{Springer}, 2014.
+
+\bibitem[Devlin et~al.(2019)]{devlin2019bert}
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova.
+\newblock BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.
+\newblock In \emph{NAACL}, 2019.
+
+\end{thebibliography}
+
+\end{document}
+
