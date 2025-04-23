@@ -5,41 +5,40 @@ import math
 @dataclass
 class Node:
     piece: bytes
-    pos: int 
-    length: int 
+    pos: int
+    length: int
     node_id: int
     connections: List['Node']
     score: float = 0.0
     cumulative_score: float = 0.0
-    alpha: float = 0.0
-    beta: float = 0.0
     gamma: float = 0.0
 
     def debug_string(self):
         return (f"Node(piece={self.piece.decode()}, pos={self.pos}, "
                 f"length={self.length}, node_id={self.node_id})")
 
-
 class Lattice:
+    alpha: List[float] = []
+    beta: List[float] = []
     def __init__(self, sentence:str, probability_distribution:Dict[str, float]):
         self.sentence = sentence
         self.size = len(sentence)
         self.sentence_utf8 = self.sentence.encode('utf-8')
         self.surface = memoryview(self.sentence_utf8)
-        self.node_id_counter = 0
+        self.node_id_counter = 2
         self.nodes = []
         self.begin_nodes: Dict[int, List[Node]] = {}
         self.end_nodes: Dict[int, List[Node]] = {}
-
+        self.byte_offsets = [0]
+        for ch in sentence:
+            self.byte_offsets.append(self.byte_offsets[-1] + len(ch.encode('utf-8')))
         self._create_base_structure()
         self.generate_lattice(probability_distribution)
         self._connect_nodes()
 
     def _create_base_structure(self):
-        self.bos = Node(piece=b"<BOS>", pos=-1, length=1, node_id=self.node_id_counter, connections=[])
-        self.node_id_counter += 1
-        self.eos = Node(piece=b"<EOS>", pos=len(self.sentence), length=1, node_id=self.node_id_counter, connections=[])
-        self.node_id_counter += 1
+        self.bos = Node(piece=b"<BOS>", pos=-1, length=1, node_id=0, connections=[], score=1.0)
+        self.eos = Node(piece=b"<EOS>", pos=len(self.sentence), length=1, node_id=1, connections=[], score=1.0)
         self.begin_nodes = {i: [] for i in range(-1, self.size + 1)}
         self.end_nodes = {i: [] for i in range(-1, self.size + 2)}
 
@@ -52,10 +51,13 @@ class Lattice:
         for i in range(self.size):
             for j in range(1, self.size - i + 1):
                 end = i + j
-                node_bytes = self.sentence_utf8[i:end]
+                sb, eb = self.byte_offsets[i], self.byte_offsets[i+j]
+                node_bytes = memoryview(self.sentence_utf8)[sb:eb]
                 if node_bytes in [b"<BOS>", b"<EOS>"]:
                     continue
-                probabilty = probability_distribution.get(node_bytes.decode(), 1e-30)
+                if node_bytes.tobytes().decode() not in probability_distribution:
+                    continue
+                probabilty = probability_distribution.get(node_bytes.tobytes().decode(), -math.inf)
 
                 node = Node(
                     piece=node_bytes,
@@ -73,6 +75,24 @@ class Lattice:
 
         
         self.nodes.extend([self.bos, self.eos])
+
+    def remove_node(self, node:Node):
+        # Remove node from begin and end nodes
+        for pos in self.begin_nodes:
+            for i in self.begin_nodes[pos]:
+                if i == node:
+                    self.begin_nodes[pos].remove(i)
+        for pos in self.end_nodes:
+            for i in self.end_nodes[pos]:
+                if i == node:
+                    self.end_nodes[pos].remove(i)
+        for i in self.nodes:
+            if i == node:
+                self.nodes.remove(i)
+        # Remove node from connections
+        for i in self.nodes:
+            if node in i.connections:
+                i.connections.remove(node)
 
     def _connect_nodes(self):
         # Create connections between nodes
